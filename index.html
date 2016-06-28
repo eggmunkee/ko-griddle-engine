@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ko-griddle-engine - Demo page</title>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.0.0.min.js"></script>
+    <script type="text/javascript" src="lib/knockout-3.4.0.js"></script>
+
+    <!-- Simple Grid template -->
+            <script type="text/template" id="grid-tmpl">
+                <table cellSpacing="0" cellPadding="0" ko-style="{ zoom: zoom }">
+                    <tbody ko-template="{ name: 'grid-row-tmpl', foreach: rows }">
+                    </tbody>
+                </table>
+                <br/>
+                <div style="border: 1px solid grey; background: #eee;">
+                    Selected:
+                    <br/>
+                    <image ko-attr="{ src: imageSource(selectedTile()) }" style="vertical-align: middle; zoom: 2.0;" />
+                    <select ko-foreach="tiles" ko-value="selectedTile">
+                        <option ko-text="$data"></option>
+                    </select>
+                    <select ko-value="zoom">
+                        <option>0.3</option>
+                        <option>0.6</option>
+                        <option>0.8</option>
+                        <option selected="selected">1.0</option>
+                        <option>1.5</option>
+                        <option>2.0</option>
+                        <option>2.5</option>
+                    </select>
+                </div>
+                <div ko-template="{ name: 'palette-tmpl', data: $data }"  style="border: 1px solid grey; background: #ddf;">
+                </div>
+            </script>
+            <script type="text/template" id="palette-tmpl">
+                <br/>
+                Palette:
+                <br/>
+                <div ko-foreach="{ data: tiles, as: 'tile' }">
+                    <span ko-click="$component.clickPaletteItem">
+                        <image ko-attr="{ src: $component.imageSource(tile) }" />
+                    </span>
+                </div>
+            </script>
+            <script type="text/template" id="grid-row-tmpl">
+                <tr ko-template="{ name: $component.cellType, foreach: cells, as: 'cellData' }">
+                </tr>
+            </script>
+            <script type="text/template" id="grid-cell-tmpl">
+                <td ko-html="cellData" ko-attr="{ 'data-col': $index }">
+                </td>
+            </script>
+            <script type="text/template" id="image-cell-tmpl">
+                <td ko-click="function() { $component.clickCell($parentContext.$index, $index); }">
+                    <img ko-attr="{src: $component.imageSource(cellData) }" />
+                </td>
+            </script>
+            <!-- Simple grid Component -->
+    	    <script type="text/javascript">
+    	        var GridVM = function(params) {
+    	            var self = this;
+
+    	            // If there is a reference observable parameter, assign self to it
+    	            if (params.reference)
+    	                params.reference(self);
+
+    	            self.rows = ko.observableArray([]);
+    	            self.cellType = ko.observable(params.cellType || 'grid-cell-tmpl');
+    	            self.selectedTile = ko.observable('');
+    	            self.zoom = ko.observable('1.0');
+    	            self.appendRow = function(cellList) {
+    	                self.rows.push({
+    	                    cells: ko.observableArray(cellList)
+    	                });
+    	            };
+
+    	            self.getGridData = function() {
+    	                var rowData = ko.toJS(engine.gridComponent().rows);
+    	                for (var i = 0; i < rowData.length; i++) {
+    	                    var row = rowData[i];
+
+    	                    var cells = row.cells;
+    	                    rowData[i] = cells;
+    	                }
+    	                return rowData;
+    	            };
+    	            self.setGridData = function(data) {
+    	                self.rows([]); // clear rows
+    	                for (var i = 0; i < data.length; i++) {
+    	                    var row = { cells: ko.observableArray(data[i]) };
+
+    	                    self.rows.push(row);
+    	                }
+    	            };
+    	            self.setCell = function(row, col, data) {
+    	                if (row < 0 || self.rows().length <= row)
+    	                    return;
+    	                var cellList = self.rows()[row].cells();
+    	                if (col < 0 || cellList.length <= col)
+    	                    return;
+    	                cellList[col] = data;
+    	                self.rows()[row].cells(cellList); //update observable cell list
+    	            };
+
+    	            $(params.rows || []).each(function() {
+    	                var cellList = this;
+    	                self.appendRow(cellList);
+    	            });
+
+    	            self.tiles = ko.observableArray([1,2,3,4,5,6]);
+    	            self.tileLookup = {
+    	                "1": "../Images/Answer.gif",
+    	                "2": "../Images/Answer_Add.gif",
+    	                "3": "../Images/Answer_Edit.gif",
+    	                "4": "../Images/Answer_Delete.gif",
+    	                "5": "../Images/Cell_Delete.gif",
+    	                "6": "../Images/spinning_cloud.png",
+    	                "DEFAULT": "../Images/spinning_cloud.png"
+    	            };
+
+    	            // Return an image source based on cell data
+    	            self.imageSource = function(cellData) {
+    	                if (cellData in self.tileLookup)
+    	                    return self.tileLookup[cellData];
+    	                return self.tileLookup["DEFAULT"];
+    	            };
+
+    	            self.clickCell = function(row, col) {
+    	                self.setCell(koVal(row), koVal(col), self.selectedTile());
+    	            };
+
+    	            self.clickPaletteItem = function(item) {
+    	                self.selectedTile(item);
+    	            };
+
+    	        };
+
+    	        ko.components.register('grid-cmp', {
+    	            viewModel: GridVM,
+    	            template: { element: 'grid-tmpl' }
+    	        });
+
+    	        var EngineVM = function(data) {
+    	            var self = this;
+
+                    self.gridComponent = ko.observable('');
+                    self.frame = ko.observable(0);
+                    self.frameRate = ko.observable(data.frameRate || 500);
+    	            self.timer = null;
+    	            self.isActive = ko.observable(false);
+    	            self.afterAdvance = data.afterAdvance || function() {};
+
+    	            self.start = function() {
+    	                if (self.timer == null)
+    	                    self.timer = setInterval(self.advance, self.frameRate());
+    	                self.isActive(true);
+    	            };
+    	            self.stop = function() {
+    	                if (self.timer != null) {
+    	                    clearInterval(self.timer);
+    	                    self.timer = null;
+    	                }
+    	                self.isActive(false);
+    	            };
+    	            self.toggleAdvance = function() {
+    	                if (self.timer == null)
+    	                    self.start();
+    	                else
+    	                    self.stop();
+    	            };
+    	            self.frameRate.subscribe(function() {
+    	                // Restart timer on frame rate change
+    	                self.frameRate(); // Create a dependency on frame rate to trigger logic
+    	                self.stop();
+    	                self.start();
+    	            });
+    	            self.advance = function() {
+    	                self.frame(self.frame() + 1);
+    	                self.afterAdvance(self);
+    	            };
+                    self.seconds = ko.computed(function() {
+                        var total = self.frame() * self.frameRate();
+                        var seconds = Math.floor((total / 1000) % 60);
+                        return seconds;
+                    }, self);
+                    self.minutes = ko.computed(function() {
+                        var total = self.frame() * self.frameRate();
+                        var min = Math.floor((total / (1000 * 60)) % 60);
+                        return min;
+                    }, self);
+
+    	        };
+    	    </script>
+
+    <style>
+      body { margin: 20px; border: 1px solid #888; }
+    </style>
+  </head>
+  <body>
+    <h1><em>ko-griddle-engine</em> - Demo page</h1>
+
+    <div id="sandbox">
+      <h1>#<span ko-text="frame"></span> - <span ko-text="minutes"></span>:<span ko-text="seconds"></span></h1>
+      <button ko-text="(isActive() ? 'Stop' : 'Start')" ko-click="toggleAdvance"></button>
+      <!-- ko component: {
+          name: 'grid-cmp',
+          params: {
+              reference: gridComponent,
+              rows: [
+                  [1,2,3,4,5],
+                  [2,4,1,3,5],
+                  [1,2,3,4,5],
+                  [5,2,4,1,3],
+                  [1,2,3,4,5],
+                  [2,4,1,3,5],
+                  [1,2,3,4,5]
+              ],
+              cellType: 'image-cell-tmpl'
+           }
+      } --><!-- /ko -->
+    </div>
+    <script type="text/javascript">
+      //Apply grid component bindings in an empty viewmodel context
+      // All data is supplied in component parameters
+      var engine = new EngineVM();
+
+      // Setup callback on frame advance
+      engine.afterAdvance = function(eng) {
+            var col = 0, row = 0, item = 0;
+            var grid = engine.gridComponent();
+            var maxCol = 0;
+            var maxRow = 0;
+            var gridData = grid.getGridData();
+            maxRow = gridData.length;
+            maxCol = gridData.length == 0 ? 0 : gridData[0].length;
+            var maxTile = grid.tiles().length;
+            for (var i = 0; i < 3; i++) {
+                col = Math.floor((Math.random() * maxCol));
+                row = Math.floor((Math.random() * maxRow));
+                item = Math.floor((Math.random() * (maxTile - 1)) + 1);
+
+                grid.setCell(row, col, item);
+            }
+        };
+
+
+      ko.applyBindings(engine, document.getElementById('sandbox'));
+
+      engine.start();
+    </script>
+  </body>
+</html>
