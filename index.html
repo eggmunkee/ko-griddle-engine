@@ -8,7 +8,7 @@
 
     <!-- Simple Grid template -->
     <script type="text/template" id="grid-tmpl">
-        <table align="center" cellSpacing="0" cellPadding="0" style="overflow: hidden;">
+        <table align="center" cellSpacing="0" cellPadding="0" style="overflow: hidden;" ko-style="{ opacity: opacity }">
             <tbody ko-template="{ name: 'grid-row-tmpl', foreach: rows }">
             </tbody>
         </table>

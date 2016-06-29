@@ -9,6 +9,8 @@ var GridVM = function(params) {
     self.cellType = ko.observable(params.cellType || 'grid-cell-tmpl');
     self.selectedTile = ko.observable('');
     self.zoom = ko.observable(1.0);
+    self.opacity = ko.observable('1.0');
+
     self.appendRow = function(cellList) {
         self.rows.push({
             cells: ko.observableArray(cellList)
