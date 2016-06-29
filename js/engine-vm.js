@@ -35,7 +35,7 @@ var EngineVM = function(data) {
     });
     self.advance = function() {
         self.frame(self.frame() + 1);
-        self.afterAdvance(self);
+        ko.tasks.schedule(self.afterAdvance(self));
     };
 
     self.seconds = ko.computed(function() {
